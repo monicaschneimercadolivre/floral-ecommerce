@@ -1,14 +1,56 @@
-import "dotenv/config";
+import dotenv from "dotenv";
+dotenv.config();
 import express from "express";
+import { join } from 'path';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
 import { ProductService } from './services/product-service.js';
 import { UserService } from "./services/user-service.js";
 import jwt from "jsonwebtoken";
 import multer from 'multer';
 import crypto from 'crypto';
+import { authMiddleware } from "./midlewares/authMidleware.js";
+import cors from 'cors';
+import { extname } from 'path'
 
 const app = express();
 const port = 3300
 app.use(express.json())
+
+app.use(express.urlencoded({extended:true}));
+
+const corsOptions = {
+  origin: 'http://localhost:8080',
+  credentials: true,            //access-control-allow-credentials:true
+  optionSuccessStatus: 200
+}
+app.use(cors(corsOptions));
+
+// const upload = multer({
+//   storage: storage,
+//   limits: {
+//     fileSize: 5000000
+//   },
+//   fileFilter: function (req, file, cb) {
+//     checkFileType(file, cb)
+//   }
+// }).single('img')
+
+// // Check file type
+// const checkFileType = (file, cb) => {
+//   // Allow ext
+//   const fileTypes = /jpeg|jpg|png|gif/
+
+//   // Check ext
+//   const extname = fileTypes.test(path.extname(file.originalname).toLowerCase())
+//   // Check mime
+//   const mimetype = fileTypes.test(file.mimetype)
+//   if (mimetype && extname) {
+//     return cb(null, true)
+//   } else {
+//     cb('Erro: Insira apenas imagens')
+//   };
+// }
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -22,27 +64,53 @@ const storage = multer.diskStorage({
 });
 const uploadMidleWare = multer({ storage })
 
-
 app.get('/', async (req, res) => {
   res.send("Floral-E-Commerce");
 });
 
-app.post('/products', async (req, res) => {
+app.use('/uploads', express.static('uploads'))
+app.post('/products', uploadMidleWare.single('image'), async (req, res) => {
   const productService = new ProductService();
-  const { name, description, price, stock, image } = req.body;
-  console.log(req.body)
-  const product = { name, description, price, stock, image }
+  const{name, description, price, stock} = req.body
+  const image = req.file.filename
+  const product = {name, description, price, stock, image}
+  await productService.addProduct(product);
+  console.log(product,image)
+  return res.status(201).json(product);
+})
+
+app.post('/productss', async (req, res) => {
+  const productService = new ProductService();
+  const product = req.body;
   await productService.add(product);
   return res.status(201).json(product);
-
 })
+
+app.post('/images',  uploadMidleWare.single('image'), async (req, res) => {
+  const productService = new ProductService();
+  const image = req.file;
+  productService.addImage(image);
+  return await res.status(201).json({
+    menssage: "Upload da imagem foi bem sucedido!",
+    file: `uploads/${image.filename}`,
+    id: image._id
+  });
+})
+
+app.get("/image/:id", async (req, res) => {
+  const imageId = (req.params.id).trim()
+  const productService = new ProductService();
+  const image = await productService.findImageById(imageId)
+  console.log(image)
+  return res.status(200).json(image);
+});
 
 app.get("/products", async (req, res) => {
   const productService = new ProductService();
   const products = await productService.findAll();
+  console.log(products)
   return res.status(200).json(products);
 });
-
 
 app.get("/products/:id", async (req, res) => {
   const id = req.params.id;
@@ -139,33 +207,17 @@ app.post("/login", async (req, res) => {
     const token = jwt.sign({ user: userLogged }, secretKey, {
       expiresIn: "1d",
     });
-    return res.status(200).json({ token });
+    return res.status(200).json({
+      token,
+      userLogged
+    });
   }
   return res.status(400).json({ message: "E-mail ou senha inválidos." });
 });
 
-app.get("/user",async(req, res) => {
-      const token = req.headers["authorization"];
-      const secretKey = process.env.SECRET_KEY;
-      jwt.verify(token, secretKey, { ignoreExpiration: false }, async (err, decodedToken) => {
-        if (err) {
-            res.status(401).json({ message: "Aconteceu um erro ao logar no sistema" })
-        }
-        const isValidToken = decodedToken && decodedToken.user;
-        if (!isValidToken) {
-            res.status(401).json({ message: "Aconteceu um erro ao logar no sistema" })
-        }
-        const userService = new UserService();
-        const user = await userService.findByEmail(decodedToken.user.email);   
-        if (user) {
-            return res.status(200).json({ 
-              user,
-              message: "You are logged" });
-        }
-    });
-  }
-);
-
+app.get("/user", authMiddleware, async (req, res) => {
+  res.status(200).send("You are logged");
+});
 
 
 app.listen(port, () => {

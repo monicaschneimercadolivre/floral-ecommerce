@@ -1,10 +1,10 @@
 
 import { UserService } from '../services/user-service.js';
+import jwt from "jsonwebtoken";
 
 export const authMiddleware = async (req, res, next) => {
     const authorization = req.headers['authorization'];
-    console.log(authorization)
-    const token = authorization ? authorization.split(" ")[1] : undefined;
+    const token = authorization ? authorization.split(" ")[0] : undefined;
     if (!token) {
         return res.status(401).json({ message: "Sem autorização, faça o login" })
     }
@@ -14,14 +14,17 @@ export const authMiddleware = async (req, res, next) => {
         if (err) {
             res.status(401).json({ message: "Aconteceu um erro ao logar no sistema" })
         }
+       
         const isValidToken = decodedToken && decodedToken.user;
         if (!isValidToken) {
             res.status(401).json({ message: "Aconteceu um erro ao logar no sistema" })
         }
         const userService = new UserService();
-        const user = await userService.findByEmail(decodedToken.user.email);
+        const user = await userService.findByEmail(decodedToken.user);
         if (user) {
-            return next();
+            return user, next()
         }
     });
+
+    return user
 };

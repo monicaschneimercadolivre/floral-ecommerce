@@ -25,21 +25,20 @@ export class UserService {
     return await UserModel.updateOne({ _id: ObjectId(id) }, user);
   }
 
-  async findByEmail(email) {
-    return await UserModel.findOne({},
-      {
-        email: email
-      }
-    );
+  async findByEmail(user) {
+    return await UserModel.findOne({user});
+  
   }
 
   async findByUser(email, password) {
-    return await UserModel.findOne({},
+    const user = await UserModel.findOne({},
       {
         email: email,
         password:password
       }
     );
+    console.log(user)
+    return user
   }
 
   async login(email, password) {
